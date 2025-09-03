@@ -21,9 +21,7 @@ jobs:
       - name: Write CHANGELOG.md (best-effort on tag)
         shell: pwsh
         run: |
-          Set-Content CHANGELOG.md @'
-${{ steps.changelog.outputs.changelog }}
-'@ -Encoding UTF8
+          Set-Content -LiteralPath CHANGELOG.md -Encoding UTF8 -Value "${{ steps.changelog.outputs.changelog }}"
           git config user.email "actions@github.com"
           git config user.name  "github-actions[bot]"
           git add CHANGELOG.md
@@ -45,5 +43,5 @@ ${{ steps.changelog.outputs.changelog }}
         env:
           PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
         run: |
-          if (-not $env:PSGALLERY_API_KEY) { throw 'Missing PSGALLERY_API_KEY secret' }
+          if (-not $env:PSGALLERY_API_KEY) { throw "Missing PSGALLERY_API_KEY secret" }
           Publish-PSResource -Path . -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY -Verbose
