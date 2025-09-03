@@ -1,0 +1,49 @@
+name: Publish DocConv to PSGallery
+on:
+  push:
+    tags: [ "v*" ]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v5
+        with:
+          configurationJson: |
+            { "template": "# Changelog\n\n## {{fromTag}}..{{toTag}}\n\n{{CHANGELOG}}",
+              "pr_template": "- {{TITLE}} (by @{{AUTHOR}} in #{{NUMBER}})" }
+
+      - name: Write CHANGELOG.md (best-effort on tag)
+        shell: pwsh
+        run: |
+          Set-Content CHANGELOG.md @'
+${{ steps.changelog.outputs.changelog }}
+'@ -Encoding UTF8
+          git config user.email "actions@github.com"
+          git config user.name  "github-actions[bot]"
+          git add CHANGELOG.md
+          git diff --cached --quiet || git commit -m "docs: update CHANGELOG for $env:GITHUB_REF_NAME" || echo "commit skipped"
+          git push || echo "push skipped on tags"
+
+      - name: Install PSResourceGet
+        shell: pwsh
+        run: |
+          Install-Module Microsoft.PowerShell.PSResourceGet -Scope CurrentUser -Force
+          Import-Module  Microsoft.PowerShell.PSResourceGet -Force
+
+      - name: Validate manifest
+        shell: pwsh
+        run: Test-ModuleManifest ./DocConv.psd1 | Format-List * | Out-String | Write-Host
+
+      - name: Publish to PSGallery
+        shell: pwsh
+        env:
+          PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
+        run: |
+          if (-not $env:PSGALLERY_API_KEY) { throw 'Missing PSGALLERY_API_KEY secret' }
+          Publish-PSResource -Path . -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY -Verbose
