@@ -18,16 +18,27 @@ jobs:
             { "template": "# Changelog\n\n## {{fromTag}}..{{toTag}}\n\n{{CHANGELOG}}",
               "pr_template": "- {{TITLE}} (by @{{AUTHOR}} in #{{NUMBER}})" }
 
-      - name: Write CHANGELOG.md (best-effort on tag)
+      - name: Write CHANGELOG.md (no commit on tag)
         shell: pwsh
         run: |
           Set-Content -LiteralPath CHANGELOG.md -Encoding UTF8 -Value "${{ steps.changelog.outputs.changelog }}"
-          git config user.email "actions@github.com"
-          git config user.name  "github-actions[bot]"
-          git add CHANGELOG.md
-          git diff --cached --quiet || git commit -m "docs: update CHANGELOG for $env:GITHUB_REF_NAME" || echo "commit skipped"
-          git push || echo "push skipped on tags"
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            Write-Host "Tag run detected; skipping commit/push (detached HEAD)";
+          } else {
+            git config user.email "actions@github.com"
+            git config user.name  "github-actions[bot]"
+            git add CHANGELOG.md
+            git diff --cached --quiet || git commit -m "docs: update CHANGELOG for $env:GITHUB_REF_NAME" || echo "commit skipped"
+            git push || echo "push skipped"
+          }
 
+      - name: Create GitHub Release
+        if: ${{ github.ref_type == 'tag' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.changelog }}
       - name: Install PSResourceGet
         shell: pwsh
         run: |
