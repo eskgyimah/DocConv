@@ -54,5 +54,20 @@ jobs:
         env:
           PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
         run: |
-          if (-not $env:PSGALLERY_API_KEY) { throw "Missing PSGALLERY_API_KEY secret" }
+                    # Init PSResourceGet repo store + PSGallery
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+          New-Item -ItemType Directory -Force -Path "\C:\Users\UCCSMS\AppData\Local\PSResourceGet" | Out-Null
+          try {
+            Register-PSResourceRepository -Name PSGallery -Uri 'https://www.powershellgallery.com/api/v2' -Trusted -ErrorAction Stop
+          } catch {
+            if ((Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+              Set-PSResourceRepository -Name PSGallery -Trusted
+            } else {
+              throw
+            }
+          }
+
+          if (-not \) { throw "Missing PSGALLERY_API_KEY secret" }
+          Publish-PSResource -Path . -Repository PSGallery -ApiKey \ -Verbose
           Publish-PSResource -Path . -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY -Verbose
+
