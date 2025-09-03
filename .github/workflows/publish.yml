@@ -1,7 +1,7 @@
 name: Publish DocConv to PSGallery
 on:
   push:
-    tags: [ "v*" ]
+    tags: ["v*"]
 permissions:
   contents: write
 jobs:
@@ -22,28 +22,27 @@ jobs:
         shell: pwsh
         run: |
           Set-Content -LiteralPath CHANGELOG.md -Encoding UTF8 -Value "${{ steps.changelog.outputs.changelog }}"
-          if ($env:GITHUB_REF_TYPE -eq "tag") {
-            Write-Host "Tag run detected; skipping commit/push (detached HEAD)";
-          } else {
+          if ($env:GITHUB_REF_TYPE -ne "tag") {
             git config user.email "actions@github.com"
             git config user.name  "github-actions[bot]"
             git add CHANGELOG.md
             git diff --cached --quiet || git commit -m "docs: update CHANGELOG for $env:GITHUB_REF_NAME" || echo "commit skipped"
             git push || echo "push skipped"
+          } else {
+            Write-Host "Tag run: skip commit/push (detached HEAD)"
           }
 
-      - name: Create GitHub Release
-        if: ${{ github.ref_type == 'tag' }}
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          body: ${{ steps.changelog.outputs.changelog }}
-      - name: Install PSResourceGet
+      - name: Setup PSResourceGet + PSGallery
         shell: pwsh
         run: |
+          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
           Install-Module Microsoft.PowerShell.PSResourceGet -Scope CurrentUser -Force
           Import-Module  Microsoft.PowerShell.PSResourceGet -Force
+          if (-not (Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
+            Register-PSResourceRepository -Name PSGallery -Uri "https://www.powershellgallery.com/api/v2" -Trusted
+          } else {
+            Set-PSResourceRepository -Name PSGallery -Trusted
+          }
 
       - name: Validate manifest
         shell: pwsh
@@ -54,20 +53,13 @@ jobs:
         env:
           PSGALLERY_API_KEY: ${{ secrets.PSGALLERY_API_KEY }}
         run: |
-                    # Init PSResourceGet repo store + PSGallery
-          [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-          New-Item -ItemType Directory -Force -Path "\C:\Users\UCCSMS\AppData\Local\PSResourceGet" | Out-Null
-          try {
-            Register-PSResourceRepository -Name PSGallery -Uri 'https://www.powershellgallery.com/api/v2' -Trusted -ErrorAction Stop
-          } catch {
-            if ((Get-PSResourceRepository -Name PSGallery -ErrorAction SilentlyContinue)) {
-              Set-PSResourceRepository -Name PSGallery -Trusted
-            } else {
-              throw
-            }
-          }
-
-          if (-not \) { throw "Missing PSGALLERY_API_KEY secret" }
-          Publish-PSResource -Path . -Repository PSGallery -ApiKey \ -Verbose
+          if (-not $env:PSGALLERY_API_KEY) { throw "Missing PSGALLERY_API_KEY secret" }
           Publish-PSResource -Path . -Repository PSGallery -ApiKey $env:PSGALLERY_API_KEY -Verbose
 
+      - name: Create GitHub Release
+        if: ${{ github.ref_type == 'tag' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.changelog }}
